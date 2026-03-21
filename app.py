@@ -1,20 +1,19 @@
 import streamlit as st
 import pandas as pd
 from docx import Document
-from docx.shared import Inches, Pt
+from docx.shared import Inches, Pt, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 import easyocr
 import io
 import os
-from PIL import Image, ImageOps, ImageEnhance, ImageFilter
+from PIL import Image, ImageOps, ImageEnhance
 import numpy as np
 import re
 
-st.set_page_config(page_title="Generador Actas Pro - IA Vision", layout="wide")
+st.set_page_config(page_title="Generador de Actas Profesional", layout="wide")
 
 @st.cache_resource
 def load_ocr():
-    # Cargamos el lector optimizado para números
     return easyocr.Reader(['es'], gpu=False)
 reader = load_ocr()
 
@@ -24,120 +23,92 @@ def get_column(keywords, df):
             return col
     return None
 
-def vision_artificial_contraste(pil_image):
-    """Transforma la foto para que el grabado del metal sea legible"""
-    # 1. Escala de grises
-    img = ImageOps.grayscale(pil_image)
-    # 2. Aumentar contraste al máximo para ver el grabado
-    img = ImageEnhance.Contrast(img).enhance(3.5)
-    # 3. Filtro de nitidez para definir los bordes de los números
-    img = img.filter(ImageFilter.SHARPEN)
-    return img
-
-# --- DATOS EDAR ---
+# --- SIDEBAR ---
 with st.sidebar:
-    st.header("📋 Datos EDAR")
-    nombre_edar = st.text_input("Nombre EDAR", "EDAR AIN")
-    localidad = st.text_input("Localidad", "AIN (Valencia)")
-    idcoste = st.text_input("IDCOSTE", "0017")
-    instaladores = st.text_input("Instaladores", "JOSE / PEPE")
-    responsable = st.text_input("Responsable Explotación", "Nombre")
-    fecha = st.date_input("Fecha Instalación")
+    st.header("📋 Datos del Acta")
+    nombre_edar = st.text_input("Nombre EDAR", "EDAR 1")
+    localidad = st.text_input("Ubicación", "Plastitis de Argentina")
+    idcoste = st.text_input("IDCOSTE", "IDCOSTE")
+    instaladores = st.text_input("Instaladores", "Instaladores")
+    fecha = st.text_input("Fecha de Instalación", "17/02/2022")
 
-st.title("📄 Generador de Actas con Visión Artificial")
+st.title("📄 Generador de Actas - ADASA & INELCOM")
 excel_file = st.file_uploader("1. Sube el Excel", type=['xlsx'])
 
 st.subheader("📸 2. Carga de Fotos")
 c1, c2 = st.columns(2)
 with c1:
-    f_puerta = st.file_uploader("🖼️ Puerta", accept_multiple_files=True)
-    f_cartel = st.file_uploader("🪧 Cartel", accept_multiple_files=True)
-    f_entrada = st.file_uploader("📥 Entrada", accept_multiple_files=True)
+    f_equipos = st.file_uploader("📥 Equipamiento (Con S/N)", accept_multiple_files=True)
 with c2:
-    f_alivio = st.file_uploader("🌊 Alivio", accept_multiple_files=True)
-    f_salida = st.file_uploader("📤 Salida", accept_multiple_files=True)
-    f_pantallas = st.file_uploader("📈 Pantallas", accept_multiple_files=True)
+    f_cartel = st.file_uploader("🪧 Cartel Informativo", accept_multiple_files=True)
 
-if st.button("🚀 GENERAR ACTA"):
+if st.button("🚀 GENERAR WORD"):
     if excel_file:
-        with st.spinner("La IA está analizando las chapas de los equipos..."):
+        with st.spinner("Generando documento..."):
             df = pd.read_excel(excel_file)
             c_coord = get_column(['coord', 'gps', 'ubicacion'], df)
             
             doc = Document()
             
-            # --- PORTADA ---
+            # --- PORTADA Y CABECERA ---
             if os.path.exists('logo_instituciona.png'):
-                doc.add_paragraph().alignment = 1
-                doc.paragraphs[-1].add_run().add_picture('logo_instituciona.png', width=Inches(6))
-
-            doc.add_heading(nombre_edar, 0).alignment = 1
-            doc.add_heading('ACTA DE CERTIFICACIÓN', 1).alignment = 1
-
-            if f_puerta:
                 p = doc.add_paragraph()
                 p.alignment = 1
-                p.add_run().add_picture(f_puerta[0], width=Inches(5))
+                p.add_run().add_picture('logo_instituciona.png', width=Inches(4.5))
 
-            tbl = doc.add_table(rows=6, cols=2)
+            doc.add_heading('ACTA DE CERTIFICACIÓN', 1).alignment = 1
+            doc.add_heading('IDENTIFICACIÓN DEL EQUIPAMIENTO INSTALADO', 2).alignment = 1
+
+            # Tabla de Datos (Como tu captura)
+            tbl = doc.add_table(rows=5, cols=2)
             tbl.style = 'Table Grid'
-            datos = [("EDAR", nombre_edar), ("LOCALIDAD", localidad), ("IDCOSTE", idcoste), ("INSTALADORES", instaladores), ("RESPONSABLE", responsable), ("FECHA", str(fecha))]
+            datos = [("EDAR", nombre_edar), ("Ubicación", localidad), ("IDCOSTC", idcoste), ("Instaladores", instaladores), ("Fecha de Instalación", fecha)]
             for i, (k, v) in enumerate(datos):
                 tbl.rows[i].cells[0].text, tbl.rows[i].cells[1].text = k, str(v)
 
-            # --- TABLA TÉCNICA ---
-            doc.add_page_break()
-            doc.add_heading('IDENTIFICACIÓN DEL EQUIPAMIENTO', level=1)
-            tbl_e = doc.add_table(rows=1, cols=3)
-            tbl_e.style = 'Table Grid'
-            hdr = tbl_e.rows[0].cells
-            hdr[0].text, hdr[1].text, hdr[2].text = 'EQUIPAMIENTO', 'Nº SERIE', 'COORDENADAS'
+            # --- SECCIÓN EQUIPOS (CON S/N) ---
+            if f_equipos:
+                doc.add_paragraph("")
+                # Usamos una tabla invisible para poner las fotos de 2 en 2
+                grid = doc.add_table(rows=0, cols=2)
+                for i, foto in enumerate(f_equipos):
+                    if i % 2 == 0: row_cells = grid.add_row().cells
+                    cell = row_cells[i % 2]
+                    
+                    # IA para detectar S/N (Optimizado para tus fotos)
+                    img = ImageOps.grayscale(Image.open(foto))
+                    txt = " ".join(reader.readtext(np.array(img), detail=0)).upper()
+                    m = re.search(r'(SN-[A-Z0-9-]+|\d{4}[-_]\d{4}[-_]\d{2})', txt)
+                    sn = m.group(0).replace("_", "-") if m else "No detectado"
+                    
+                    cell.paragraphs[0].add_run().add_picture(foto, width=Inches(2.5))
+                    cell.add_paragraph(f"S/N: {sn}").alignment = 1
 
-            secciones = [("CARTEL", f_cartel), ("ENTRADA", f_entrada), ("ALIVIO", f_alivio), ("SALIDA", f_salida), ("PANTALLAS", f_pantallas)]
-            
-            for titulo, lista in secciones:
-                if lista:
-                    doc.add_page_break()
-                    doc.add_heading(titulo, level=1)
-                    grid = doc.add_table(rows=0, cols=2)
-                    for i, foto in enumerate(lista):
-                        if i % 2 == 0: row_cells = grid.add_row().cells
-                        cell = row_cells[i % 2]
-                        
-                        sn, coor = "No detectado", "N/A"
-                        
-                        if titulo == "CARTEL":
-                            obs = "Observaciones: Fotografía del cartel de subvenciones de fondos europeos."
-                        else:
-                            # --- PROCESO DE VISIÓN ARTIFICIAL ---
-                            img_raw = Image.open(foto)
-                            img_mejorada = vision_artificial_contraste(img_raw)
-                            
-                            # Leer texto
-                            txt_ia = " ".join(reader.readtext(np.array(img_mejorada), detail=0)).upper()
-                            
-                            # Buscar S/N con patrones específicos
-                            m = re.search(r'(\d{4}[-_]\d{4}[-_]\d{2}|SN-[A-Z0-9-]+|ITC\d+|[A-Z0-9]{4}-[A-Z0-9]{4})', txt_ia)
-                            if m:
-                                sn = m.group(0).replace("_", "-")
-                                if c_coord and i < len(df): coor = str(df.iloc[i][c_coord])
-                                r = tbl_e.add_row().cells
-                                r[0].text, r[1].text, r[2].text = titulo, sn, coor
-                            
-                            obs = f"{titulo} S/N: {sn}"
+            # --- SECCIÓN CARTEL (SIN S/N) ---
+            if f_cartel:
+                doc.add_heading('FOTOS DE CARTEL INFORMATIVO', level=1)
+                for foto in f_cartel:
+                    p = doc.add_paragraph()
+                    p.alignment = 1
+                    p.add_run().add_picture(foto, width=Inches(4))
+                    # TEXTO FIJO PARA CARTEL
+                    t_obs = doc.add_paragraph()
+                    t_obs.alignment = 1
+                    run = t_obs.add_run("Observaciones: Fotografía del cartel de subvenciones de fondos europeos.")
+                    run.bold = True
+                    run.font.size = Pt(10)
 
-                        cell.paragraphs[0].add_run().add_picture(foto, width=Inches(3.0))
-                        cell.add_paragraph(obs).alignment = 1
-
-            # --- FIRMA ---
-            doc.add_page_break()
-            doc.add_heading('FIRMA Y VALIDACIÓN', level=1).alignment = 1
-            tbl_f = doc.add_table(rows=2, cols=1)
-            tbl_f.style = 'Table Grid'
-            tbl_f.rows[0].cells[0].text = "FIRMA:"
-            tbl_f.rows[1].height = Inches(2)
+            # --- LOGOS FINALES (ADASA E INELCOM) ---
+            doc.add_paragraph("")
+            p_final = doc.add_paragraph()
+            p_final.alignment = 1
+            if os.path.exists('logo_adasa.png'):
+                p_final.add_run().add_picture('logo_adasa.png', width=Inches(1.5))
+            p_final.add_run("    ")
+            if os.path.exists('logo_inelcom.png'):
+                p_final.add_run().add_picture('logo_inelcom.png', width=Inches(1.5))
 
             target = io.BytesIO()
             doc.save(target)
-            st.success("✅ Acta generada con Visión Artificial")
+            st.success("✅ ¡Acta generada!")
             st.download_button("📥 DESCARGAR WORD", target.getvalue(), f"Acta_{nombre_edar}.docx")
