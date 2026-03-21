@@ -5,8 +5,10 @@ from docx.shared import Inches, Pt, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 import easyocr
 import io
+import os
 from PIL import Image
 import numpy as np
+import re
 
 st.set_page_config(page_title="Generador Actas ADASA-INELCOM", layout="wide")
 
@@ -49,22 +51,22 @@ with col2:
 
 if st.button("📝 GENERAR ACTA FINAL"):
     if excel_file:
-        with st.spinner("Generando acta profesional..."):
+        with st.spinner("Procesando fotos y detectando números de serie..."):
             df = pd.read_excel(excel_file)
-            c_serie = get_column(['serie', 'sn', 's/n'], df)
             c_coord = get_column(['coord', 'gps', 'ubicacion'], df)
-            c_desc = get_column(['desc', 'nombre', 'punto'], df)
-
+            
             doc = Document()
             
-            # --- PÁGINA 1: PORTADA CON LOGO EU ---
-            try:
-                p = doc.add_paragraph()
-                p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                # BUSCA EL LOGO INSTITUCIONAL (EU)
-                p.add_run().add_picture('logo_institucional.png', width=Inches(5))
-            except: 
-                st.warning("No se encontró 'logo_institucional.png' en GitHub")
+            # --- PÁGINA 1: PORTADA ---
+            p = doc.add_paragraph()
+            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            
+            # Intento con el nombre que me has dado: logo_instituciona.png
+            nombres_logo = ['logo_instituciona.png', 'logo_institucional.png', 'Logo_Institucional.png']
+            for n in nombres_logo:
+                if os.path.exists(n):
+                    p.add_run().add_picture(n, width=Inches(5))
+                    break
 
             doc.add_heading(nombre_edar, 0).alignment = WD_ALIGN_PARAGRAPH.CENTER
             doc.add_heading('ACTA DE CERTIFICACIÓN', 1).alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -72,9 +74,8 @@ if st.button("📝 GENERAR ACTA FINAL"):
             if foto_puerta:
                 p_p = doc.add_paragraph()
                 p_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                p_p.add_run().add_picture(foto_puerta[0], width=Inches(3))
+                p_p.add_run().add_picture(foto_puerta[0], width=Inches(3.2))
 
-            # Cuadrícula Datos EDAR (Calcada a tu foto)
             table_info = doc.add_table(rows=5, cols=2)
             table_info.style = 'Table Grid'
             datos = [("EDAR", nombre_edar), ("LOCALIDAD", f"{localidad} ({provincia})"), ("IDCOSTE", idcoste), ("INSTALADORES", instaladores), ("FECHA", str(fecha))]
@@ -84,11 +85,9 @@ if st.button("📝 GENERAR ACTA FINAL"):
 
             p_logos = doc.add_paragraph()
             p_logos.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            try:
-                p_logos.add_run().add_picture('logo_adasa.png', width=Inches(1))
-                p_logos.add_run("    ")
-                p_logos.add_run().add_picture('logo_inelcom.png', width=Inches(1))
-            except: pass
+            if os.path.exists('logo_adasa.png'): p_logos.add_run().add_picture('logo_adasa.png', width=Inches(1.1))
+            p_logos.add_run("    ")
+            if os.path.exists('logo_inelcom.png'): p_logos.add_run().add_picture('logo_inelcom.png', width=Inches(1.1))
 
             # --- PÁGINA 2: IDENTIFICACIÓN EQUIPOS ---
             doc.add_page_break()
@@ -98,7 +97,6 @@ if st.button("📝 GENERAR ACTA FINAL"):
             hdr = tbl_equip.rows[0].cells
             hdr[0].text, hdr[1].text, hdr[2].text = 'EQUIPAMIENTO', 'Nº SERIE', 'COORDENADAS'
 
-            # --- SECCIONES ---
             secciones = [("FOTO CARTEL", foto_cartel), ("ENTRADA", fotos_entrada), ("ALIVIO", fotos_alivio), ("SALIDA", fotos_salida), ("GRÁFICAS", fotos_graficas)]
             
             for titulo, lista in secciones:
@@ -109,40 +107,41 @@ if st.button("📝 GENERAR ACTA FINAL"):
                         if i % 2 == 0: cells = grid.add_row().cells
                         cell = cells[i % 2]
                         
-                        sn, coor = "No detectado", "N/A"
-                        # IA más agresiva
-                        if titulo not in ["FOTO CARTEL", "GRÁFICAS"]:
-                            img = Image.open(foto)
-                            txt = " ".join(reader.readtext(np.array(img), detail=0)).replace(" ", "").replace("-", "")
-                            if c_serie:
-                                for _, row in df.iterrows():
-                                    s_ex = str(row[c_serie]).replace(" ", "").replace("-", "")
-                                    if s_ex in txt and len(s_ex) > 4:
-                                        sn, coor = str(row[c_serie]), str(row[c_coord])
-                                        d = str(row[c_desc]) if c_desc else titulo
-                                        r = tbl_equip.add_row().cells
-                                        r[0].text, r[1].text, r[2].text = d, sn, coor
-                                        break
+                        # IA Detecta S/N
+                        img = Image.open(foto)
+                        txt_ia = " ".join(reader.readtext(np.array(img), detail=0))
                         
-                        cell.paragraphs[0].add_run().add_picture(foto, width=Inches(2.5))
-                        p_d = cell.add_paragraph(f"{titulo} S/N: {sn}")
-                        p_d.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                        # Buscar patrones de S/N (ej: 2532-XXXX o SN-XXXX)
+                        match = re.search(r'(\d{4}-\d{4}-\d{2}|SN-\w+-\d+)', txt_ia)
+                        sn_detectado = match.group(0) if match else "No detectado"
+                        
+                        # Coordenadas: Cogemos la fila i del Excel para cada equipo i de la lista
+                        coord_val = "N/A"
+                        if c_coord and i < len(df):
+                            coord_val = str(df.iloc[i][c_coord])
 
-            # --- CONCLUSIONES Y FIRMA ---
+                        if sn_detectado != "No detectado":
+                            r = tbl_equip.add_row().cells
+                            r[0].text, r[1].text, r[2].text = titulo, sn_detectado, coord_val
+                        
+                        cell.paragraphs[0].add_run().add_picture(foto, width=Inches(2.4))
+                        cell.add_paragraph(f"{titulo} S/N: {sn_detectado}").alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+            # --- FINAL: CONCLUSIONES Y FIRMA ---
             doc.add_page_break()
-            title_c = doc.add_heading('CONCLUSIONES', level=1)
-            title_c.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            title_c.runs[0].font.color.rgb = RGBColor(112, 48, 160)
+            c_h = doc.add_heading('CONCLUSIONES', level=1)
+            c_h.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            c_h.runs[0].font.color.rgb = RGBColor(112, 48, 160)
             
             tbl_c = doc.add_table(rows=1, cols=1)
             tbl_c.style = 'Table Grid'
             tbl_c.rows[0].cells[0].text = f"LA INSTALACIÓN EN {nombre_edar}, QUEDA COMPLETADA CORRECTAMENTE Y EN SERVICIO."
 
             doc.add_paragraph("\n")
-            title_f = doc.add_heading('FIRMA Y VALIDACIÓN.', level=1)
-            title_f.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            title_f.runs[0].font.color.rgb = RGBColor(112, 48, 160)
-            doc.add_paragraph("Esta Asistencia Técnica de Control, certifica que la instalación ha sido supervisada y verificada según normativa.")
+            f_h = doc.add_heading('FIRMA Y VALIDACIÓN.', level=1)
+            f_h.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            f_h.runs[0].font.color.rgb = RGBColor(112, 48, 160)
+            doc.add_paragraph("Esta Asistencia Técnica de Control, certifica que la instalación ha sido supervisada y verificada.")
             
             tbl_f = doc.add_table(rows=2, cols=1)
             tbl_f.style = 'Table Grid'
