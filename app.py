@@ -55,13 +55,13 @@ if st.button("🚀 GENERAR ACTA COMPACTA (6 FOTOS/PAG)", use_container_width=Tru
         try:
             doc = Document()
             
-            # 1. LOGO INSTITUCIONAL (Cabecera) [cite: 9]
+            # 1. LOGO INSTITUCIONAL (Cabecera derecha)
             if os.path.exists("logo_instituciona.png"):
                 p_inst = doc.add_paragraph()
                 p_inst.alignment = WD_ALIGN_PARAGRAPH.RIGHT
                 p_inst.add_run().add_picture("logo_instituciona.png", width=Inches(2.5))
 
-            # 2. PORTADA (Nombre EDAR + Acta + Portada) [cite: 10, 11, 15]
+            # 2. PORTADA (Nombre EDAR + Acta + Portada)
             doc.add_heading(edar, 0).alignment = WD_ALIGN_PARAGRAPH.CENTER
             doc.add_heading("ACTA DE CERTIFICACIÓN", level=1).alignment = WD_ALIGN_PARAGRAPH.CENTER
             if f_portada:
@@ -69,16 +69,25 @@ if st.button("🚀 GENERAR ACTA COMPACTA (6 FOTOS/PAG)", use_container_width=Tru
                 p_port.alignment = WD_ALIGN_PARAGRAPH.CENTER
                 p_port.add_run().add_picture(io.BytesIO(f_portada.read()), width=Inches(3.5))
 
-            # 3. CUADRÍCULA DE DATOS [cite: 12]
+            # 3. CUADRÍCULA DE DATOS (Aquí estaba el error corregido)
             data_table = doc.add_table(rows=0, cols=2)
             data_table.style = 'Table Grid'
-            campos = [("EDAR", edar), ("IDCOSTE", idcoste), ("POBLACIÓN", poblacion), ("FECHA", fecha), ("TÉCNICOS", tecnicos)]
-            for c, v in campos:
+            campos = [
+                ("EDAR", edar), 
+                ("IDCOSTE", idcoste), 
+                ("DIRECCIÓN", direccion),
+                ("POBLACIÓN", poblacion), 
+                ("PROVINCIA", provincia),
+                ("FECHA", fecha), 
+                ("TÉCNICOS", tecnicos),
+                ("RESPONSABLE", responsable)
+            ]
+            for nombre_campo, valor_campo in campos:
                 row = data_table.add_row().cells
-                row[0].text = c
-                row[1].text = str(v)
+                row[0].text = nombre_campo
+                row[1].text = str(valor_campo)
             
-            # 4. LOGOS PEQUEÑOS CENTRADOS [cite: 9]
+            # 4. LOGOS PEQUEÑOS CENTRADOS
             doc.add_paragraph("\n")
             log_table = doc.add_table(rows=1, cols=2)
             for i, l_name in enumerate(["logo_adasa.png", "logo_inelcom.png"]):
@@ -87,17 +96,17 @@ if st.button("🚀 GENERAR ACTA COMPACTA (6 FOTOS/PAG)", use_container_width=Tru
                     p_log.alignment = WD_ALIGN_PARAGRAPH.CENTER
                     p_log.add_run().add_picture(l_name, width=Inches(1.0))
 
-            # 5. TABLA EQUIPAMIENTO (Pág 2) [cite: 13, 14]
+            # 5. TABLA EQUIPAMIENTO (Pág 2)
             doc.add_page_break()
             doc.add_heading("IDENTIFICACIÓN DEL EQUIPAMIENTO INSTALADO", level=1)
-            eq_table = doc.add_table(rows=5, cols=3)
+            eq_table = doc.add_table(rows=6, cols=3)
             eq_table.style = 'Table Grid'
             for i, h in enumerate(['EQUIPAMIENTO', 'NÚMERO DE SERIE', 'COORDENADAS']):
                 eq_table.cell(0, i).text = h
 
-            # 6. SECCIONES TÉCNICAS (6 FOTOS POR PÁGINA) 
+            # 6. SECCIONES TÉCNICAS (6 FOTOS POR PÁGINA)
             secciones = [
-                ("CARTEL", [f_cartel]),
+                ("FOTO CARTEL", [f_cartel]),
                 ("ALIVIOS", [f_alivio_e1, f_alivio_e2, f_alivio_c1, f_alivio_c2, f_alivio_c3]),
                 ("CAUDALÍMETROS", [f_cauda_e1, f_cauda_e2, f_cauda_s1, f_cauda_s2]),
                 ("SENSORES CALIDAD", [f_calid_e1, f_calid_e2, f_calid_s1, f_calid_s2])
@@ -108,34 +117,14 @@ if st.button("🚀 GENERAR ACTA COMPACTA (6 FOTOS/PAG)", use_container_width=Tru
                 if imgs:
                     doc.add_page_break()
                     doc.add_heading(titulo, level=1)
-                    # Cuadrícula 2 columnas x N filas
                     grid = doc.add_table(rows=0, cols=2)
                     for i in range(0, len(imgs), 2):
-                        row = grid.add_row().cells
+                        row_cells = grid.add_row().cells
                         for j in range(2):
                             if i+j < len(imgs):
-                                p_g = row[j].paragraphs[0]
+                                p_g = row_cells[j].paragraphs[0]
                                 p_g.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                                p_g.add_run().add_picture(io.BytesIO(imgs[i+j].read()), width=Inches(2.3)) # Tamaño para 6/pág
-                    # Observación ÚNICA al final de la sección [cite: 5, 20]
-                    doc.add_paragraph(f"\nObservaciones {titulo}: ___________________________________________")
-
-            # 7. GRÁFICAS Y CIERRE [cite: 19, 28, 30]
-            if f_graficas:
-                doc.add_page_break()
-                doc.add_heading("GRÁFICAS", level=1)
-                for g in f_graficas:
-                    doc.add_picture(io.BytesIO(g.read()), width=Inches(4.5))
-                doc.add_paragraph("\nObservaciones Gráficas: ___________________________________________")
-
-            doc.add_page_break()
-            doc.add_heading("CONCLUSIONES", level=1)
-            doc.add_paragraph(f"LA INSTALACIÓN EN EDAR {edar} QUEDA COMPLETADA CORRECTAMENTE.")
-            doc.add_paragraph("\n\nFIRMA:__________________________") [cite: 32]
-
-            target = io.BytesIO()
-            doc.save(target)
-            st.success("✅ Acta Ultra-Compacta generada.")
-            st.download_button("💾 DESCARGAR ACTA", target.getvalue(), f"Acta_{edar}.docx")
-        except Exception as e:
-            st.error(f"Error: {e}")
+                                p_g.add_run().add_picture(io.BytesIO(imgs[i+j].read()), width=Inches(2.3))
+                    
+                    # Observación ÚNICA al final de la sección para ahorrar espacio
+                    doc.add_
