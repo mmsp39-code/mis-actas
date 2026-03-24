@@ -5,8 +5,17 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 import io
 import os
 
-# Configuración para Pantalla Ancha (Escritorio)
+# Configuración para Pantalla Ancha
 st.set_page_config(page_title="Generador de Actas Profesional", layout="wide")
+
+# --- LÓGICA DE REINICIO ---
+if "reset_app" not in st.session_state:
+    st.session_state.reset_app = False
+
+def restart_application():
+    for key in st.session_state.keys():
+        del st.session_state[key]
+    st.rerun()
 
 # --- BARRA LATERAL ---
 with st.sidebar:
@@ -19,6 +28,11 @@ with st.sidebar:
     fecha = st.text_input("Fecha instalación", "DD/MM/AAAA")
     tecnicos = st.text_input("Técnicos instaladores", "")
     responsable = st.text_input("Responsable Explotación", "")
+    
+    st.divider()
+    # BOTÓN DE REINICIAR (En la sidebar para que no estorbe)
+    if st.button("♻️ REINICIAR FORMULARIO", use_container_width=True, type="secondary"):
+        restart_application()
 
 # --- PANEL PRINCIPAL ---
 st.title("📄 Generador de Actas ADASA & INELCOM")
@@ -30,50 +44,51 @@ c1, c2, c3, c4 = st.columns(4)
 
 with c1:
     st.error("#### 🖼️ GENERALES")
-    f_portada = st.file_uploader("Foto Portada", accept_multiple_files=True)
-    f_cartel = st.file_uploader("Cartel Informativo", accept_multiple_files=True)
-    f_graficas = st.file_uploader("Gráficas", accept_multiple_files=True)
+    f_portada = st.file_uploader("Foto Portada", accept_multiple_files=True, key="u1")
+    f_cartel = st.file_uploader("Cartel Informativo", accept_multiple_files=True, key="u2")
+    f_graficas = st.file_uploader("Gráficas", accept_multiple_files=True, key="u3")
 
 with c2:
     st.warning("#### 🌊 ALIVIOS")
-    f_alivio_e1 = st.file_uploader("Alivio EDAR 1", accept_multiple_files=True)
-    f_alivio_e2 = st.file_uploader("Alivio EDAR 2", accept_multiple_files=True)
-    f_alivio_c1 = st.file_uploader("Alivio Colector 1", accept_multiple_files=True)
-    f_alivio_c2 = st.file_uploader("Alivio Colector 2", accept_multiple_files=True)
-    f_alivio_c3 = st.file_uploader("Alivio Colector 3", accept_multiple_files=True)
+    f_alivio_e1 = st.file_uploader("Alivio EDAR 1", accept_multiple_files=True, key="u4")
+    f_alivio_e2 = st.file_uploader("Alivio EDAR 2", accept_multiple_files=True, key="u5")
+    f_alivio_c1 = st.file_uploader("Alivio Colector 1", accept_multiple_files=True, key="u6")
+    f_alivio_c2 = st.file_uploader("Alivio Colector 2", accept_multiple_files=True, key="u7")
+    f_alivio_c3 = st.file_uploader("Alivio Colector 3", accept_multiple_files=True, key="u8")
 
 with c3:
     st.success("#### 📥 CAUDALÍMETROS")
-    f_cauda_e1 = st.file_uploader("Caudalímetro Entrada 1", accept_multiple_files=True)
-    f_cauda_e2 = st.file_uploader("Caudalímetro Entrada 2", accept_multiple_files=True)
-    f_cauda_s1 = st.file_uploader("Caudalímetro Salida 1", accept_multiple_files=True)
-    f_cauda_s2 = st.file_uploader("Caudalímetro Salida 2", accept_multiple_files=True)
+    f_cauda_e1 = st.file_uploader("Caudalímetro Entrada 1", accept_multiple_files=True, key="u9")
+    f_cauda_e2 = st.file_uploader("Caudalímetro Entrada 2", accept_multiple_files=True, key="u10")
+    f_cauda_s1 = st.file_uploader("Caudalímetro Salida 1", accept_multiple_files=True, key="u11")
+    f_cauda_s2 = st.file_uploader("Caudalímetro Salida 2", accept_multiple_files=True, key="u12")
 
 with c4:
     st.info("#### 🧪 CALIDAD")
-    f_calid_e1 = st.file_uploader("Calidad Entrada 1", accept_multiple_files=True)
-    f_calid_e2 = st.file_uploader("Calidad Entrada 2", accept_multiple_files=True)
-    f_calid_s1 = st.file_uploader("Calidad Salida 1", accept_multiple_files=True)
-    f_calid_s2 = st.file_uploader("Calidad Salida 2", accept_multiple_files=True)
+    f_calid_e1 = st.file_uploader("Calidad Entrada 1", accept_multiple_files=True, key="u13")
+    f_calid_e2 = st.file_uploader("Calidad Entrada 2", accept_multiple_files=True, key="u14")
+    f_calid_s1 = st.file_uploader("Calidad Salida 1", accept_multiple_files=True, key="u15")
+    f_calid_s2 = st.file_uploader("Calidad Salida 2", accept_multiple_files=True, key="u16")
 
 st.divider()
 
-if st.button("🚀 GENERAR DOCUMENTO FINAL", use_container_width=True):
+if st.button("🚀 GENERAR DOCUMENTO FINAL", use_container_width=True, type="primary"):
     with st.spinner("Maquetando acta..."):
         doc = Document()
         
         # 1. Portada y Datos
         if os.path.exists('logo_instituciona.png'):
-            doc.add_paragraph().alignment = 1
-            doc.paragraphs[-1].add_run().add_picture('logo_instituciona.png', width=Inches(5))
+            p_inst = doc.add_paragraph()
+            p_inst.alignment = 1
+            p_inst.add_run().add_picture('logo_instituciona.png', width=Inches(5))
 
         doc.add_heading(edar, 0).alignment = 1
         doc.add_heading('ACTA DE CERTIFICACIÓN', 1).alignment = 1
 
         if f_portada:
-            p = doc.add_paragraph()
-            p.alignment = 1
-            p.add_run().add_picture(f_portada[0], width=Inches(4))
+            p_port = doc.add_paragraph()
+            p_port.alignment = 1
+            p_port.add_run().add_picture(f_portada[0], width=Inches(4))
 
         # Tabla de Datos
         datos = [("EDAR", edar), ("IDCOSTE", idcoste), ("Población", poblacion), ("Dirección", direccion), ("Provincia", provincia), ("Fecha instalación", fecha), ("Técnicos instaladores", tecnicos), ("Responsable Explotación", responsable)]
@@ -118,9 +133,8 @@ if st.button("🚀 GENERAR DOCUMENTO FINAL", use_container_width=True):
                     r_ley = p_ley.add_run(f"\n{leyenda}")
                     r_ley.font.size = Pt(10)
                     r_ley.font.bold = True
-                    if titulo == "GRÁFICAS": r_ley.font.color.rgb = None # Texto normal para conclusión
 
-        # 3. Firma (Simplificada)
+        # 3. Firma
         doc.add_paragraph("\n\n")
         tbl_f = doc.add_table(rows=2, cols=1)
         tbl_f.style = 'Table Grid'
