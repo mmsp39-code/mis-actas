@@ -39,4 +39,109 @@ with c3:
     f_cauda_e1 = st.file_uploader("Ent. 1", accept_multiple_files=True, key="u9")
     f_cauda_e2 = st.file_uploader("Ent. 2", accept_multiple_files=True, key="u10")
     f_cauda_s1 = st.file_uploader("Sal. 1", accept_multiple_files=True, key="u11")
-    f_cauda_s2 = st.file_uploader("
+    f_cauda_s2 = st.file_uploader("Sal. 2", accept_multiple_files=True, key="u12")
+with c4:
+    st.info("#### 🧪 CALIDAD")
+    f_calid_e1 = st.file_uploader("Ent. 1", accept_multiple_files=True, key="u13")
+    f_calid_e2 = st.file_uploader("Ent. 2", accept_multiple_files=True, key="u14")
+    f_calid_s1 = st.file_uploader("Sal. 1", accept_multiple_files=True, key="u15")
+    f_calid_s2 = st.file_uploader("Sal. 2", accept_multiple_files=True, key="u16")
+
+# --- GENERACIÓN ---
+if st.button("🚀 GENERAR ACTA COMPACTA", use_container_width=True, type="primary"):
+    if not edar:
+        st.warning("Falta el nombre de la EDAR.")
+    else:
+        try:
+            doc = Document()
+            
+            # 1. LOGO INSTITUCIONAL
+            if os.path.exists("logo_instituciona.png"):
+                p_inst = doc.add_paragraph()
+                p_inst.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+                p_inst.add_run().add_picture("logo_instituciona.png", width=Inches(2.5))
+
+            # 2. PORTADA
+            doc.add_heading(edar, 0).alignment = WD_ALIGN_PARAGRAPH.CENTER
+            doc.add_heading("ACTA DE CERTIFICACIÓN", level=1).alignment = WD_ALIGN_PARAGRAPH.CENTER
+            if f_portada:
+                p_port = doc.add_paragraph()
+                p_port.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                p_port.add_run().add_picture(io.BytesIO(f_portada.read()), width=Inches(3.5))
+
+            # 3. CUADRÍCULA DE DATOS
+            data_table = doc.add_table(rows=0, cols=2)
+            data_table.style = 'Table Grid'
+            campos = [
+                ("EDAR", edar), ("IDCOSTE", idcoste), ("DIRECCIÓN", direccion),
+                ("POBLACIÓN", poblacion), ("PROVINCIA", provincia),
+                ("FECHA", fecha), ("TÉCNICOS", tecnicos), ("RESPONSABLE", responsable)
+            ]
+            for n, v in campos:
+                row = data_table.add_row().cells
+                row[0].text = n
+                row[1].text = str(v)
+            
+            # 4. LOGOS ADASA/INELCOM
+            doc.add_paragraph("\n")
+            log_table = doc.add_table(rows=1, cols=2)
+            for i, l_name in enumerate(["logo_adasa.png", "logo_inelcom.png"]):
+                if os.path.exists(l_name):
+                    p_l = log_table.cell(0, i).paragraphs[0]
+                    p_l.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                    p_l.add_run().add_picture(l_name, width=Inches(1.0))
+
+            # 5. TABLA EQUIPAMIENTO
+            doc.add_page_break()
+            doc.add_heading("IDENTIFICACIÓN DEL EQUIPAMIENTO INSTALADO", level=1)
+            eq_table = doc.add_table(rows=6, cols=3)
+            eq_table.style = 'Table Grid'
+            for i, h in enumerate(['EQUIPAMIENTO', 'NÚMERO DE SERIE', 'COORDENADAS']):
+                eq_table.cell(0, i).text = h
+
+            # 6. SECCIONES (2 columnas x 3 filas aprox = 6 por pág)
+            secciones = [
+                ("FOTO CARTEL", [f_cartel]),
+                ("ALIVIOS", [f_alivio_e1, f_alivio_e2, f_alivio_c1, f_alivio_c2, f_alivio_c3]),
+                ("CAUDALÍMETROS", [f_cauda_e1, f_cauda_e2, f_cauda_s1, f_cauda_s2]),
+                ("SENSORES CALIDAD", [f_calid_e1, f_calid_e2, f_calid_s1, f_calid_s2])
+            ]
+
+            for titulo, uploaders in secciones:
+                imgs = [foto for up in uploaders if up for foto in up]
+                if imgs:
+                    doc.add_page_break()
+                    doc.add_heading(titulo, level=1)
+                    grid = doc.add_table(rows=0, cols=2)
+                    for i in range(0, len(imgs), 2):
+                        row_c = grid.add_row().cells
+                        for j in range(2):
+                            if i+j < len(imgs):
+                                p_g = row_c[j].paragraphs[0]
+                                p_g.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                                p_g.add_run().add_picture(io.BytesIO(imgs[i+j].read()), width=Inches(2.3))
+                    
+                    doc.add_paragraph(f"\nObservaciones {titulo}: ___________________________________________")
+
+            # 7. GRÁFICAS Y CIERRE
+            if f_graficas:
+                doc.add_page_break()
+                doc.add_heading("GRÁFICAS", level=1)
+                for g in f_graficas:
+                    p_graf = doc.add_paragraph()
+                    p_graf.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                    p_graf.add_run().add_picture(io.BytesIO(g.read()), width=Inches(4.5))
+                doc.add_paragraph("\nObservaciones Gráficas: ___________________________________________")
+
+            doc.add_page_break()
+            doc.add_heading("CONCLUSIONES", level=1)
+            doc.add_paragraph(f"LA INSTALACIÓN EN EDAR {edar} QUEDA COMPLETADA CORRECTAMENTE.")
+            doc.add_paragraph("\n\nFIRMA:__________________________")
+
+            target = io.BytesIO()
+            doc.save(target)
+            st.success("✅ Documento generado.")
+            st.download_button("💾 DESCARGAR ACTA", target.getvalue(), f"Acta_{edar}.docx")
+            
+        except Exception as e:
+            st.error(f"Error: {e}")
