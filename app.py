@@ -5,12 +5,13 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 import io
 import os
 
-st.set_page_config(page_title="Generador de Actas EDAR - Diseño Pro", layout="wide")
+# Configuración de la página
+st.set_page_config(page_title="Generador de Actas - Plantilla Certificación", layout="wide")
 
-# --- DATOS LATERALES ---
+# --- BARRA LATERAL: DATOS ---
 with st.sidebar:
-    st.header("📋 Datos del Acta")
-    edar = st.text_input("EDAR", key="edar_name")
+    st.header("📋 Datos del Informe")
+    edar = st.text_input("Nombre de la EDAR", key="edar_name")
     idcoste = st.text_input("IDCOSTE", key="id_coste")
     poblacion = st.text_input("Población", key="pob")
     direccion = st.text_input("Dirección", key="dir")
@@ -18,13 +19,17 @@ with st.sidebar:
     fecha = st.text_input("Fecha instalación", key="fec")
     tecnicos = st.text_input("Técnicos instaladores", key="tec")
     responsable = st.text_input("Responsable Explotación", key="resp")
-    if st.button("♻️ REINICIAR"):
-        for key in list(st.session_state.keys()): del st.session_state[key]
+    
+    st.divider()
+    if st.button("♻️ REINICIAR TODO", use_container_width=True):
+        for key in list(st.session_state.keys()):
+            del st.session_state[key]
         st.rerun()
 
-st.title("📄 Generador de Actas - Estructura Final")
+st.title("📄 Generador de Acta de Certificación")
+st.info("Complete los datos a la izquierda y suba las fotos en las secciones correspondientes.")
 
-# --- BLOQUES DE CARGA (Tus 16 selectores) ---
+# --- CARGA DE FOTOS (Tus 16 selectores originales) ---
 c1, c2, c3, c4 = st.columns(4)
 with c1:
     st.error("#### 🖼️ GENERALES")
@@ -39,7 +44,7 @@ with c2:
     f_alivio_c2 = st.file_uploader("A. Col 2", accept_multiple_files=True, key="u7")
     f_alivio_c3 = st.file_uploader("A. Col 3", accept_multiple_files=True, key="u8")
 with c3:
-    st.success("#### 📥 CAUDA.")
+    st.success("#### 📥 CAUDAL.")
     f_cauda_e1 = st.file_uploader("Ent. 1", accept_multiple_files=True, key="u9")
     f_cauda_e2 = st.file_uploader("Ent. 2", accept_multiple_files=True, key="u10")
     f_cauda_s1 = st.file_uploader("Sal. 1", accept_multiple_files=True, key="u11")
@@ -51,75 +56,81 @@ with c4:
     f_calid_s1 = st.file_uploader("Sal. 1", accept_multiple_files=True, key="u15")
     f_calid_s2 = st.file_uploader("Sal. 2", accept_multiple_files=True, key="u16")
 
-# --- GENERACIÓN DEL DOCUMENTO ---
-if st.button("🚀 GENERAR ACTA FORMATEADA", use_container_width=True, type="primary"):
+# --- PROCESO DE GENERACIÓN ---
+if st.button("🚀 GENERAR ACTA FINAL", use_container_width=True, type="primary"):
     if not edar:
-        st.warning("Falta el nombre de la EDAR.")
+        st.warning("Por favor, indique el nombre de la EDAR.")
     else:
         try:
             doc = Document()
             
-            # 1. LOGOS ENCABEZADO (Tabla invisible de 3 columnas)
+            # 1. LOGOS (Encabezado superior)
             header_table = doc.add_table(rows=1, cols=3)
             header_table.width = Inches(7)
             logos = ["logo_adasa.png", "logo_inelcom.png", "logo_instituciona.png"]
             for i, l_name in enumerate(logos):
                 if os.path.exists(l_name):
-                    cell = header_table.cell(0, i)
-                    p = cell.paragraphs[0]
+                    p = header_table.cell(0, i).paragraphs[0]
                     run = p.add_run()
                     run.add_picture(l_name, width=Inches(1.2))
                     if i == 1: p.alignment = WD_ALIGN_PARAGRAPH.CENTER
                     if i == 2: p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
 
-            doc.add_heading(f"ACTA DE CONTROL E INSTALACIÓN: {edar}", 0)
+            # 2. TÍTULO Y DATOS GENERALES
+            doc.add_heading(f"\n{edar.upper()}", 0).alignment = WD_ALIGN_PARAGRAPH.CENTER
+            doc.add_heading("ACTA DE CERTIFICACIÓN", level=1).alignment = WD_ALIGN_PARAGRAPH.CENTER
+            
+            doc.add_paragraph(f"\nEDAR {edar}\nIDCOSTE: {idcoste}\n{direccion}\nPoblación: {poblacion}\nResponsable: {responsable}\nProvincia: {provincia}\nFecha: {fecha}\nTécnicos: {tecnicos}")
 
-            # 2. TABLA DE DATOS (2 columnas, limpia)
-            table = doc.add_table(rows=0, cols=2)
-            table.style = 'Table Grid'
-            datos = [("EDAR", edar), ("IDCOSTE", idcoste), ("POBLACIÓN", poblacion), ("PROVINCIA", provincia), ("DIRECCIÓN", direccion), ("FECHA", fecha), ("TÉCNICOS", tecnicos), ("RESPONSABLE", responsable)]
-            for c, v in datos:
-                row = table.add_row().cells
-                row[0].text = c
-                row[1].text = str(v)
+            # 3. CUADRÍCULA DE EQUIPAMIENTO (Vacía con enunciados)
+            doc.add_page_break()
+            doc.add_heading("IDENTIFICACIÓN DEL EQUIPAMIENTO INSTALADO", level=1)
+            table_eq = doc.add_table(rows=6, cols=3) # Filas vacías para rellenar a mano o después
+            table_eq.style = 'Table Grid'
+            encabezados = ['EQUIPAMIENTO', 'NÚMERO DE SERIE', 'COORDENADAS']
+            for i, texto in enumerate(encabezados):
+                table_eq.cell(0, i).text = texto
+                table_eq.cell(0, i).paragraphs[0].runs[0].bold = True
 
-            # 3. FOTOS EN CUADRÍCULA (2 por fila)
+            # 4. FOTOS Y GRÁFICAS (Secciones)
             bloques = [
-                ("FOTOS GENERALES", [f_portada, f_cartel, f_graficas]),
-                ("SECCIÓN ALIVIOS", [f_alivio_e1, f_alivio_e2, f_alivio_c1, f_alivio_c2, f_alivio_c3]),
-                ("SECCIÓN CAUDALÍMETROS", [f_cauda_e1, f_cauda_e2, f_cauda_s1, f_cauda_s2]),
-                ("SECCIÓN CALIDAD", [f_calid_e1, f_calid_e2, f_calid_s1, f_calid_s2])
+                ("FOTO CARTEL Y PORTADA", [f_portada, f_cartel]),
+                ("GRÁFICAS", [f_graficas]),
+                ("ALIVIOS", [f_alivio_e1, f_alivio_e2, f_alivio_c1, f_alivio_c2, f_alivio_c3]),
+                ("CAUDALÍMETROS", [f_cauda_e1, f_cauda_e2, f_cauda_s1, f_cauda_s2]),
+                ("CALIDAD", [f_calid_e1, f_calid_e2, f_calid_s1, f_calid_s2])
             ]
 
             for titulo, uploaders in bloques:
-                todas_las_fotos = [f for up in uploaders if up for f in up]
-                if todas_las_fotos:
+                fotos_a_poner = [f for up in uploaders if up for f in up]
+                if fotos_a_poner:
                     doc.add_page_break()
                     doc.add_heading(titulo, level=1)
-                    # Creamos tabla para fotos (2 columnas)
-                    grid = doc.add_table(rows=0, cols=2)
-                    for i in range(0, len(todas_las_fotos), 2):
-                        row_cells = grid.add_row().cells
-                        for j in range(2):
-                            if i + j < len(todas_las_fotos):
-                                f = todas_las_fotos[i + j]
-                                p = row_cells[j].paragraphs[0]
-                                run = p.add_run()
-                                run.add_picture(io.BytesIO(f.read()), width=Inches(3.1))
-                                row_cells[j].add_paragraph(f.name).alignment = WD_ALIGN_PARAGRAPH.CENTER
+                    for foto in fotos_a_poner:
+                        # Insertar foto centrada
+                        p_foto = doc.add_paragraph()
+                        p_foto.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                        run_f = p_foto.add_run()
+                        run_f.add_picture(io.BytesIO(foto.read()), width=Inches(4.5))
+                        # Observaciones (según plantilla Albufera)
+                        doc.add_paragraph(f"Observaciones: _________________________________________________")
 
-            # 4. SECCIÓN DE FIRMAS
+            # 5. CONCLUSIÓN
             doc.add_page_break()
-            doc.add_heading("FIRMAS Y CONFORMIDAD", level=1)
-            f_table = doc.add_table(rows=2, cols=2)
-            f_table.width = Inches(7)
-            f_table.cell(0,0).text = "\n\n__________________________\nFirma Técnico Instalador"
-            f_table.cell(0,1).text = "\n\n__________________________\nFirma Responsable Explotación"
+            doc.add_heading("CONCLUSIONES", level=1)
+            doc.add_paragraph(f"LA INSTALACIÓN EN EDAR {edar}, QUEDA COMPLETADA CORRECTAMENTE Y EN SERVICIO.")
 
-            # 5. DESCARGA
+            # 6. FIRMA
+            doc.add_paragraph("\n\n\n")
+            doc.add_heading("FIRMA Y VALIDACIÓN", level=1)
+            doc.add_paragraph("Esta Asistencia Técnica de Control certifica que la instalación ha sido supervisada y verificada.")
+            doc.add_paragraph("\n\nFIRMA:__________________________")
+
+            # Guardar y Descargar
             target = io.BytesIO()
             doc.save(target)
-            st.success("✅ Acta estructurada correctamente.")
+            st.success("✅ Acta generada siguiendo el modelo de Albufera Sur.")
             st.download_button("💾 DESCARGAR ACTA (.docx)", target.getvalue(), f"Acta_{edar}.docx")
+            
         except Exception as e:
-            st.error(f"Error: {e}")
+            st.error(f"Error técnico: {e}")
